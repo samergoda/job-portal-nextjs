@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const COOKIE_NAME = "auth_token";
+function getCookieName(){
+  const name = process.env.AUTH_COOKIE_NAME;
+  if (!name) {
+    throw new Error("AUTH_COOKIE_NAME environment variable is required");
+  }
+  return name;
+}
 
 /**
  * Routes that require authentication.
- * Add new protected path prefixes here.
  */
 const PROTECTED_PATHS = ["/profile", "/applied-jobs", "/saved-jobs", "/employer"];
 
@@ -13,9 +18,10 @@ const PROTECTED_PATHS = ["/profile", "/applied-jobs", "/saved-jobs", "/employer"
  */
 const AUTH_PAGES = ["/login", "/register"];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
+  const cookieName = getCookieName();
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const token = request.cookies.get(cookieName)?.value;
 
   // Redirect authenticated users away from login/register
   if (AUTH_PAGES.some((path) => pathname.startsWith(path)) && token) {

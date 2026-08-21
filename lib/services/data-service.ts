@@ -1,5 +1,40 @@
 import httpClient, { API_ENDPOINTS } from "@/lib/api";
-import type { DisplayJob, DisplayCompany, Job, Company } from "@/lib/types";
+import type { DisplayJob, DisplayCompany, Job } from "@/lib/types";
+
+type RawJob = {
+  id: number | string;
+  title?: string;
+  companyName?: string;
+  company?: string;
+  location?: string;
+  jobType?: string;
+  type?: string;
+  workType?: string;
+  salary?: Job["salary"];
+  salaryMin?: number;
+  description?: string;
+  requirements?: string[] | string;
+  tags?: string[];
+  category?: string;
+  experienceLevel?: string;
+  remote?: boolean;
+  postedDate?: string;
+};
+
+type RawCompany = {
+  id: number | string;
+  name: string;
+  industry?: string;
+  size?: string;
+  employees?: number;
+  location?: string;
+  locations?: string[] | string;
+  rating?: number;
+  description?: string;
+  logo?: string;
+  founded?: number;
+  jobs?: RawJob[];
+};
 
 function formatSalary(salary: Job["salary"]): string {
   if (typeof salary === "string") return salary;
@@ -8,7 +43,7 @@ function formatSalary(salary: Job["salary"]): string {
   return `$${min}k - $${max}k`;
 }
 
-function normalizeJob(job: any): DisplayJob {
+function normalizeJob(job: RawJob): DisplayJob {
   const companyName = job.companyName || job.company || "Unknown";
   const jobType = job.jobType || job.type || "Full-time";
   const workType = job.workType || "On-site";
@@ -27,9 +62,11 @@ function normalizeJob(job: any): DisplayJob {
 
   let tags: string[] = [];
   if (Array.isArray(job.requirements)) {
+    tags = job.requirements.slice(0, 4);
+  } else if (typeof job.requirements === "string") {
     try {
-      const parsed = typeof job.requirements === "string" ? JSON.parse(job.requirements) : job.requirements;
-      tags = Array.isArray(parsed) ? parsed.slice(0, 4) : [];
+      const parsed: unknown = JSON.parse(job.requirements);
+      tags = Array.isArray(parsed) ? (parsed as string[]).slice(0, 4) : [];
     } catch {
       tags = [];
     }
@@ -58,7 +95,7 @@ function normalizeJob(job: any): DisplayJob {
   };
 }
 
-function normalizeCompany(company: any): DisplayCompany {
+function normalizeCompany(company: RawCompany): DisplayCompany {
   const locations = company.locations
     ? Array.isArray(company.locations)
       ? company.locations
@@ -86,8 +123,8 @@ function normalizeCompany(company: any): DisplayCompany {
 }
 
 export async function fetchDisplayJobs(): Promise<DisplayJob[]> {
-  const response = await httpClient.get(API_ENDPOINTS.COMPANIES);
-  const companies: any[] = response.data || [];
+  const response = await httpClient.get<RawCompany[]>(API_ENDPOINTS.COMPANIES);
+  const companies: RawCompany[] = response.data || [];
 
   const allJobs: DisplayJob[] = [];
   for (const company of companies) {
@@ -101,8 +138,8 @@ export async function fetchDisplayJobs(): Promise<DisplayJob[]> {
 }
 
 export async function fetchDisplayCompanies(): Promise<DisplayCompany[]> {
-  const response = await httpClient.get(API_ENDPOINTS.COMPANIES);
-  const companies: any[] = response.data || [];
+  const response = await httpClient.get<RawCompany[]>(API_ENDPOINTS.COMPANIES);
+  const companies: RawCompany[] = response.data || [];
   return companies.map(normalizeCompany);
 }
 
@@ -117,13 +154,13 @@ export async function fetchDisplayJobById(id: string): Promise<DisplayJob | null
 
 export async function fetchDisplayCompanyById(id: string): Promise<(DisplayCompany & { jobs?: DisplayJob[] }) | null> {
   try {
-    const response = await httpClient.get(API_ENDPOINTS.COMPANY_BY_ID(id));
+    const response = await httpClient.get<RawCompany>(API_ENDPOINTS.COMPANY_BY_ID(id));
     const company = response.data;
     if (!company) return null;
 
     const normalized = normalizeCompany(company);
     const jobs: DisplayJob[] = Array.isArray(company.jobs)
-      ? company.jobs.map((job: any) => normalizeJob({ ...job, companyName: job.companyName || company.name }))
+      ? company.jobs.map((job) => normalizeJob({ ...job, companyName: job.companyName || company.name }))
       : [];
 
     return { ...normalized, jobs };

@@ -1,4 +1,4 @@
-import axios, { AxiosHeaders } from "axios";
+import axios, { AxiosHeaders, AxiosRequestConfig } from "axios";
 
 /**
  * Client-side HTTP client.
@@ -6,8 +6,6 @@ import axios, { AxiosHeaders } from "axios";
  * All authenticated requests go through /api/proxy/... route handlers,
  * which attach the JWT from the httpOnly cookie on the server side.
  * The token is NEVER accessible to client-side JavaScript.
- *
- * Public data endpoints also go through the proxy for consistency.
  */
 
 export const DEFAULT_API_VERSION = "1.0";
@@ -54,7 +52,7 @@ export const API_ENDPOINTS = {
 };
 
 /**
- * The httpClient now targets Next.js proxy routes (/api/proxy/...).
+ * The httpClient targets Next.js proxy routes (/api/proxy/...).
  * The proxy attaches the JWT from the httpOnly cookie server-side.
  * No token handling on the client.
  */
@@ -76,7 +74,7 @@ httpClient.interceptors.request.use((config) => {
 
 httpClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  (error: unknown) => {
     if (axios.isAxiosError(error) && error.response?.status === 401) {
       if (typeof window !== "undefined") {
         const isLoginRequest = String(error.config?.url || "").includes("/auth/login");
@@ -91,31 +89,34 @@ httpClient.interceptors.response.use(
   }
 );
 
+function buildHeaders(existing: AxiosRequestConfig["headers"], version: string): AxiosHeaders {
+  const headers = new AxiosHeaders();
+  if (existing) {
+    if (existing instanceof AxiosHeaders) {
+      headers.set(existing.toJSON());
+    } else {
+      headers.set(existing as Record<string, string>);
+    }
+  }
+  headers.set("Accept", getAcceptHeader(version));
+  return headers;
+}
+
 export const withApiVersion = (version: string) => ({
-  get: (url: string, config = {}) => {
-    const headers = new AxiosHeaders((config as any)?.headers || {});
-    headers.set("Accept", getAcceptHeader(version));
-    return httpClient.get(url, { ...(config as any), headers });
+  get: (url: string, config: AxiosRequestConfig = {}) => {
+    return httpClient.get(url, { ...config, headers: buildHeaders(config.headers, version) });
   },
-  post: (url: string, data?: unknown, config = {}) => {
-    const headers = new AxiosHeaders((config as any)?.headers || {});
-    headers.set("Accept", getAcceptHeader(version));
-    return httpClient.post(url, data, { ...(config as any), headers });
+  post: (url: string, data?: unknown, config: AxiosRequestConfig = {}) => {
+    return httpClient.post(url, data, { ...config, headers: buildHeaders(config.headers, version) });
   },
-  put: (url: string, data?: unknown, config = {}) => {
-    const headers = new AxiosHeaders((config as any)?.headers || {});
-    headers.set("Accept", getAcceptHeader(version));
-    return httpClient.put(url, data, { ...(config as any), headers });
+  put: (url: string, data?: unknown, config: AxiosRequestConfig = {}) => {
+    return httpClient.put(url, data, { ...config, headers: buildHeaders(config.headers, version) });
   },
-  patch: (url: string, data?: unknown, config = {}) => {
-    const headers = new AxiosHeaders((config as any)?.headers || {});
-    headers.set("Accept", getAcceptHeader(version));
-    return httpClient.patch(url, data, { ...(config as any), headers });
+  patch: (url: string, data?: unknown, config: AxiosRequestConfig = {}) => {
+    return httpClient.patch(url, data, { ...config, headers: buildHeaders(config.headers, version) });
   },
-  delete: (url: string, config = {}) => {
-    const headers = new AxiosHeaders((config as any)?.headers || {});
-    headers.set("Accept", getAcceptHeader(version));
-    return httpClient.delete(url, { ...(config as any), headers });
+  delete: (url: string, config: AxiosRequestConfig = {}) => {
+    return httpClient.delete(url, { ...config, headers: buildHeaders(config.headers, version) });
   },
 });
 

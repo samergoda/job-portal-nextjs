@@ -15,7 +15,42 @@ export type CompanyRecord = {
   jobs?: Array<Record<string, unknown>>;
 };
 
-const transformJob = (job: any) => ({
+type RawJob = {
+  id: number | string;
+  title?: string;
+  companyName?: string;
+  companyId?: number | string;
+  location?: string;
+  workType?: string;
+  jobType?: string;
+  category?: string;
+  experienceLevel?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
+  description?: string;
+  requirements?: string;
+  benefits?: string;
+  applicationsCount?: number;
+};
+
+type RawCompany = {
+  id: number | string;
+  name: string;
+  logo?: string;
+  industry?: string;
+  size?: string;
+  rating?: number;
+  locations?: string;
+  founded?: number;
+  description?: string;
+  employees?: number;
+  website?: string;
+  jobs?: RawJob[];
+};
+
+const transformJob = (job: RawJob) => ({
   ...job,
   id: job.id,
   title: job.title,
@@ -43,8 +78,8 @@ const transformJob = (job: any) => ({
 });
 
 export const fetchCompanies = async (): Promise<CompanyRecord[]> => {
-  const response = await httpClient.get(API_ENDPOINTS.COMPANIES);
-  return (response.data || []).map((company: any) => ({
+  const response = await httpClient.get<RawCompany[]>(API_ENDPOINTS.COMPANIES);
+  return (response.data || []).map((company) => ({
     ...company,
     id: company.id,
     name: company.name,
@@ -67,7 +102,7 @@ export const fetchAllJobs = async () => {
 };
 
 export const fetchCompanyById = async (id: string | number) => {
-  const response = await httpClient.get(API_ENDPOINTS.COMPANY_BY_ID(id));
+  const response = await httpClient.get<RawCompany>(API_ENDPOINTS.COMPANY_BY_ID(id));
   return response.data;
 };
 

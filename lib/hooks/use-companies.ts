@@ -15,7 +15,7 @@ export function useCompanies() {
       setError(null);
       const data = await fetchDisplayCompanies();
       setCompanies(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[useCompanies] Failed to fetch companies:", err);
       setError("Failed to load companies. Please try again.");
     } finally {
@@ -44,7 +44,7 @@ export function useCompanyById(id: string) {
         setError(null);
         const data = await fetchDisplayCompanyById(id);
         if (!cancelled) setCompany(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) setError("Failed to load company details.");
       } finally {
         if (!cancelled) setLoading(false);

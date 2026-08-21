@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 
 type UserRole = "ROLE_JOB_SEEKER" | "ROLE_EMPLOYER" | "ROLE_ADMIN" | "jobSeeker" | "employer" | "admin";
 
@@ -41,7 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const res = await axios.get("/api/auth/me", { withCredentials: true });
+        const res = await axios.get<{ user: AuthUser | null }>("/api/auth/me", {
+          withCredentials: true,
+        });
         if (res.data?.user) {
           setUser(res.data.user);
         }
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
 
     try {
-      const res = await axios.post(
+      const res = await axios.post<{ user: AuthUser }>(
         "/api/auth/login",
         { username: email, password },
         { withCredentials: true }
@@ -79,21 +81,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setIsLoading(false);
       return { success: false, error: "Invalid response from server" };
-    } catch (error: any) {
+    } catch (error: unknown) {
       setIsLoading(false);
 
-      if (error.response) {
-        return {
-          success: false,
-          error: error.response.data?.error || `Authentication failed (${error.response.status})`,
-        };
-      }
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<{ error?: string; message?: string }>;
 
-      if (error.request) {
-        return {
-          success: false,
-          error: "Cannot connect to server. Please check if backend is running.",
-        };
+        if (axiosError.response) {
+          return {
+            success: false,
+            error: axiosError.response.data?.error || `Authentication failed (${axiosError.response.status})`,
+          };
+        }
+
+        if (axiosError.request) {
+          return {
+            success: false,
+            error: "Cannot connect to server. Please check if backend is running.",
+          };
+        }
       }
 
       return { success: false, error: "An unexpected error occurred" };
@@ -113,11 +119,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await axios.post("/api/proxy/auth/register", data, { withCredentials: true });
       return { success: true };
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.message || "Registration failed",
-      };
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<{ message?: string }>;
+        return {
+          success: false,
+          error: axiosError.response?.data?.message || "Registration failed",
+        };
+      }
+      return { success: false, error: "Registration failed" };
     }
   }, []);
 

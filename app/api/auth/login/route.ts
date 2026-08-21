@@ -1,31 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8080/api";
-const COOKIE_NAME = "auth_token";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+import { SERVER_CONFIG, getAcceptHeader } from "@/lib/server/config";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body: unknown = await request.json();
 
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/vnd.eazyapp+json;v=1.0",
+        Accept: getAcceptHeader(),
       },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch(() => ({})) as Record<string, string>;
       return NextResponse.json(
         { error: errorData.message || `Authentication failed (${response.status})` },
         { status: response.status }
       );
     }
 
-    const data = await response.json();
+    const data = await response.json() as { jwtToken?: string; user?: Record<string, unknown> };
 
     if (!data.jwtToken) {
       return NextResponse.json(
@@ -34,20 +31,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Return user data to the client, but store the token in an httpOnly cookie
     const res = NextResponse.json({ user: data.user });
 
-    res.cookies.set(COOKIE_NAME, data.jwtToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: COOKIE_MAX_AGE,
+    res.cookies.set(SERVER_CONFIG.cookie.name, data.jwtToken, {
+      httpOnly: SERVER_CONFIG.cookie.httpOnly,
+      secure: SERVER_CONFIG.cookie.secure,
+      sameSite: SERVER_CONFIG.cookie.sameSite,
+      path: SERVER_CONFIG.cookie.path,
+      maxAge: SERVER_CONFIG.cookie.maxAge,
     });
 
     return res;
-  } catch (error: any) {
-    console.error("[API Login] Error:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[API Login] Error:", message);
     return NextResponse.json(
       { error: "Cannot connect to server. Please check if backend is running." },
       { status: 503 }

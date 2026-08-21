@@ -15,7 +15,7 @@ export function useJobs() {
       setError(null);
       const data = await fetchDisplayJobs();
       setJobs(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[useJobs] Failed to fetch jobs:", err);
       setError("Failed to load jobs. Please try again.");
     } finally {
@@ -44,7 +44,7 @@ export function useJobById(id: string) {
         setError(null);
         const data = await fetchDisplayJobById(id);
         if (!cancelled) setJob(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) setError("Failed to load job details.");
       } finally {
         if (!cancelled) setLoading(false);

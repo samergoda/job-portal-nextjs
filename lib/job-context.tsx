@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import axios, { AxiosError } from "axios";
 import { useAuth } from "@/lib/auth-context";
 import * as savedJobService from "@/lib/services/saved-job-service";
 import * as jobApplicationService from "@/lib/services/job-application-service";
@@ -16,6 +17,23 @@ type JobItem = {
   applicationId?: string | number;
   coverLetter?: string;
   [key: string]: unknown;
+};
+
+type ApplicationRecord = {
+  id: string | number;
+  job: Record<string, unknown>;
+  appliedAt: string;
+  status: string;
+  coverLetter?: string;
+};
+
+type SavedJobRecord = {
+  job: Record<string, unknown>;
+  savedAt: string;
+};
+
+type ApiErrorData = {
+  message?: string;
 };
 
 type JobContextValue = {
@@ -53,9 +71,10 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
 
       if (user.role === "ROLE_JOB_SEEKER" || user.role === "jobSeeker") {
         try {
-          const applications = await jobApplicationService.getMyApplications();
-          const transformed = applications.map((app: any) => ({
+          const applications: ApplicationRecord[] = await jobApplicationService.getMyApplications();
+          const transformed: JobItem[] = applications.map((app) => ({
             ...app.job,
+            id: app.id,
             appliedAt: app.appliedAt,
             status: app.status,
             applicationId: app.id,
@@ -63,41 +82,25 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
           }));
           setAppliedJobs(transformed);
         } catch {
-          const local = window.localStorage.getItem(`appliedJobs_${user.userId ?? user.id}`);
-          if (local) setAppliedJobs(JSON.parse(local));
+          // Silently fail — user will see empty state
         }
 
         try {
-          const saved = await savedJobService.getSavedJobs();
-          const mapped = saved.map((item: any) => ({
+          const saved: SavedJobRecord[] = await savedJobService.getSavedJobs();
+          const mapped: JobItem[] = saved.map((item) => ({
             ...item.job,
+            id: item.job.id as string | number,
             savedAt: item.savedAt,
           }));
           setSavedJobs(mapped);
         } catch {
-          const local = window.localStorage.getItem(`savedJobs_${user.userId ?? user.id}`);
-          if (local) setSavedJobs(JSON.parse(local));
+          // Silently fail — user will see empty state
         }
-      }
-
-      if (user.role === "employer" || user.role === "ROLE_EMPLOYER") {
-        const savedPostedJobs = window.localStorage.getItem(`postedJobs_${user.id ?? user.userId}`);
-        const savedApplications = window.localStorage.getItem(`allApplications_${user.id ?? user.userId}`);
-
-        if (savedPostedJobs) setPostedJobs(JSON.parse(savedPostedJobs));
-        if (savedApplications) setAllApplications(JSON.parse(savedApplications));
       }
     };
 
     loadData();
   }, [user]);
-
-  useEffect(() => {
-    if (user && (user.role === "employer" || user.role === "ROLE_EMPLOYER")) {
-      window.localStorage.setItem(`postedJobs_${user.id ?? user.userId}`, JSON.stringify(postedJobs));
-      window.localStorage.setItem(`allApplications_${user.id ?? user.userId}`, JSON.stringify(allApplications));
-    }
-  }, [postedJobs, allApplications, user]);
 
   const applyForJob = async (job: JobItem, coverLetter = "") => {
     if (!user || !(user.role === "ROLE_JOB_SEEKER" || user.role === "jobSeeker")) {
@@ -114,7 +117,7 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const application = await jobApplicationService.applyForJob(job.id, coverLetter);
-      const nextApplication = {
+      const nextApplication: JobItem = {
         ...job,
         appliedAt: application.appliedAt,
         status: application.status,
@@ -123,8 +126,12 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
       };
       setAppliedJobs((previous) => [...previous, nextApplication]);
       return { success: true, message: "Application submitted successfully!" };
-    } catch (error: any) {
-      return { success: false, error: error.response?.data?.message || "Failed to apply for job" };
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<ApiErrorData>;
+        return { success: false, error: axiosError.response?.data?.message || "Failed to apply for job" };
+      }
+      return { success: false, error: "Failed to apply for job" };
     }
   };
 
@@ -141,8 +148,12 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
       await savedJobService.saveJob(job.id);
       setSavedJobs((previous) => [{ ...job, savedAt: new Date().toISOString() }, ...previous]);
       return { success: true, message: "Job saved successfully!" };
-    } catch (error: any) {
-      return { success: false, error: error.response?.data?.message || "Failed to save job" };
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<ApiErrorData>;
+        return { success: false, error: axiosError.response?.data?.message || "Failed to save job" };
+      }
+      return { success: false, error: "Failed to save job" };
     }
   };
 
@@ -155,8 +166,12 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
       await savedJobService.unsaveJob(jobId);
       setSavedJobs((previous) => previous.filter((item) => item.id !== jobId));
       return { success: true, message: "Job removed from saved jobs" };
-    } catch (error: any) {
-      return { success: false, error: error.response?.data?.message || "Failed to unsave job" };
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<ApiErrorData>;
+        return { success: false, error: axiosError.response?.data?.message || "Failed to unsave job" };
+      }
+      return { success: false, error: "Failed to unsave job" };
     }
   };
 
@@ -176,7 +191,8 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
       unsaveJob,
       isJobApplied,
     }),
-    [appliedJobs, savedJobs, postedJobs, allApplications]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [appliedJobs, savedJobs, postedJobs, allApplications, user]
   );
 
   return <JobContext.Provider value={value}>{children}</JobContext.Provider>;

@@ -84,10 +84,11 @@ export default function ContactPage() {
       });
       setFormData({ name: "", email: "", userType: "jobseeker", subject: "", message: "" });
       setErrors({});
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to submit. Please try again.";
       toast({
         title: "Submission failed",
-        description: error.message || "Failed to submit. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
