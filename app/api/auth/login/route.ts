@@ -1,16 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SERVER_CONFIG, getAcceptHeader } from "@/lib/server/config";
 
+type CsrfResponse = {
+  token: string;
+  headerName: string;
+};
+
+/**
+ * Fetches a CSRF token from the backend.
+ * The backend returns { token, headerName } in the JSON body.
+ */
+async function fetchCsrfToken(): Promise<CsrfResponse | null> {
+  try {
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/csrf-token/public`, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json() as CsrfResponse;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: unknown = await request.json();
 
-    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/auth/login`, {
+    // Fetch CSRF token first (Spring Boot requires it for POST)
+    const csrf = await fetchCsrfToken();
+console.log("csrf",csrf);
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: getAcceptHeader(),
+    };
+
+    if (csrf) {
+      // Set the CSRF token in the header (using the headerName from backend)
+      headers[csrf.headerName] = csrf.token;
+      // Also set the CSRF token as a cookie for Spring's CookieCsrfTokenRepository validation
+      headers["Cookie"] = `XSRF-TOKEN=${csrf.token}`;
+    }
+
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/auth/login/public`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: getAcceptHeader(),
-      },
+      headers,
       body: JSON.stringify(body),
     });
 

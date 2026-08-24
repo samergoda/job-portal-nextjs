@@ -1,9 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SERVER_CONFIG, getAcceptHeader } from "@/lib/server/config";
 
+const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
+
+type CsrfResponse = {
+  token: string;
+  headerName: string;
+};
+
+/**
+ * Fetches a CSRF token from the backend.
+ * The backend returns { token, headerName } in the JSON body.
+ */
+async function fetchCsrfToken(): Promise<CsrfResponse | null> {
+  try {
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/csrf-token/public`, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json() as CsrfResponse;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Proxy route handler that forwards authenticated requests to the backend.
- * The JWT is read from the httpOnly cookie — never exposed to client JS.
+ * - JWT is read from the httpOnly cookie — never exposed to client JS.
+ * - CSRF token is fetched and forwarded for state-changing methods.
  */
 async function proxyRequest(
   request: NextRequest,
@@ -25,9 +53,18 @@ async function proxyRequest(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const hasBody = !["GET", "HEAD", "OPTIONS"].includes(request.method);
+  const hasBody = !SAFE_METHODS.includes(request.method);
   if (hasBody) {
     headers["Content-Type"] = request.headers.get("content-type") || "application/json";
+
+    // Fetch and attach CSRF token for state-changing requests
+    const csrf = await fetchCsrfToken();
+    if (csrf) {
+      // Set the CSRF token in the header (using the headerName from backend)
+      headers[csrf.headerName] = csrf.token;
+      // Also set the CSRF token as a cookie for Spring's CookieCsrfTokenRepository validation
+      headers["Cookie"] = `XSRF-TOKEN=${csrf.token}`;
+    }
   }
 
   try {
