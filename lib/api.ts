@@ -14,7 +14,7 @@ export const getAcceptHeader = (version = DEFAULT_API_VERSION) =>
   `application/vnd.eazyapp+json;v=${version}`;
 
 export const API_ENDPOINTS = {
-  COMPANIES: "/companies/public",
+  COMPANIES: "v1/companies/public",
   COMPANY_BY_ID: (id: string | number) => `/companies/${id}`,
   JOBS: "/jobs",
   JOB_BY_ID: (id: string | number) => `/jobs/${id}`,

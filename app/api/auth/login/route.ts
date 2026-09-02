@@ -10,17 +10,19 @@ type CsrfResponse = {
  * Fetches a CSRF token from the backend.
  * The backend returns { token, headerName } in the JSON body.
  */
-async function fetchCsrfToken(): Promise<CsrfResponse | null> {
+async function fetchCsrfToken(){
+  console.log('`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`',`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`);
+  
   try {
-    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/csrf-token/public`, {
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`, {
       method: "GET",
       credentials: "include",
     });
 
     if (!response.ok) return null;
+    
+   return await response.json() as CsrfResponse;
 
-    const data = await response.json() as CsrfResponse;
-    return data;
   } catch {
     return null;
   }
@@ -32,7 +34,6 @@ export async function POST(request: NextRequest) {
 
     // Fetch CSRF token first (Spring Boot requires it for POST)
     const csrf = await fetchCsrfToken();
-console.log("csrf",csrf);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -46,7 +47,7 @@ console.log("csrf",csrf);
       headers["Cookie"] = `XSRF-TOKEN=${csrf.token}`;
     }
 
-    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/auth/login/public`, {
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/v1/auth/login/public`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),

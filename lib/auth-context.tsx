@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
 
     try {
-      const res = await axios.post<{ user: AuthUser }>(
+      const res = await axios.post(
         "/api/auth/login",
         { username: email, password },
         { withCredentials: true }
