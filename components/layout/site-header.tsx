@@ -20,7 +20,7 @@ const navItems: Array<{ href: Route; label: string }> = [
 
 export function SiteHeader() {
   const { theme, toggleTheme } = useTheme();
-  const { user, isAuthenticated, isEmployer, isJobSeeker, isAdmin, logout } = useAuth();
+  const { user, isAuthenticated, isEmployer, isJobSeeker, isAdmin, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -80,7 +80,9 @@ export function SiteHeader() {
 
           {/* Desktop auth area */}
           <div className="hidden items-center gap-2 md:flex">
-            {isAuthenticated ? (
+            {isLoading ? (
+              <div className="h-8 w-24 animate-pulse rounded-lg bg-muted" />
+            ) : isAuthenticated ? (
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -191,7 +193,9 @@ export function SiteHeader() {
             ))}
 
             <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
-              {isAuthenticated ? (
+              {isLoading ? (
+                <div className="h-8 w-full animate-pulse rounded-lg bg-muted" />
+              ) : isAuthenticated ? (
                 <>
                   {/* User info */}
                   <div className="flex items-center gap-2 px-3 py-2">

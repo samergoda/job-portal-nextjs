@@ -7,10 +7,20 @@ import "server-only";
 
 export const SERVER_CONFIG = {
   apiBaseUrl: process.env.API_BASE_URL || "http://localhost:8080/api",
-  apiVersion: process.env.API_VERSION || "1.0",
+  apiVersion: process.env.API_VERSION || "v1",
   cookie: {
     name: process.env.AUTH_COOKIE_NAME || "auth_token",
-    maxAge: Number(process.env.AUTH_COOKIE_MAX_AGE) || 60 * 60 * 24 * 7,
+    maxAge: Number(process.env.AUTH_COOKIE_MAX_AGE) || 60 * 60 * 24,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+  },
+  // Non-sensitive user display data. Readable so /me can restore the session
+  // without hitting the backend. The JWT itself stays httpOnly.
+  userCookie: {
+    name: process.env.USER_COOKIE_NAME || "auth_user",
+    maxAge: Number(process.env.AUTH_COOKIE_MAX_AGE) || 60 * 60 * 24,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,

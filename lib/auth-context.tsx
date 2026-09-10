@@ -3,9 +3,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import axios, { AxiosError } from "axios";
 
-type UserRole = "ROLE_JOB_SEEKER" | "ROLE_EMPLOYER" | "ROLE_ADMIN" | "jobSeeker" | "employer" | "admin";
+export type UserRole = "ROLE_JOB_SEEKER" | "ROLE_EMPLOYER" | "ROLE_ADMIN" | "jobSeeker" | "employer" | "admin";
 
-type AuthUser = {
+export type AuthUser = {
   id?: number | string;
   userId?: number | string;
   email?: string;
@@ -33,12 +33,21 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export function AuthProvider({
+  children,
+  initialUser = null,
+}: {
+  children: React.ReactNode;
+  initialUser?: AuthUser | null;
+}) {
+  const [user, setUser] = useState<AuthUser | null>(initialUser);
+  // If the server already resolved the user, we're not loading.
+  const [isLoading, setIsLoading] = useState(initialUser === null);
 
-  // On mount, check if there's a valid session via the httpOnly cookie
+  // Only fetch client-side if the server didn't provide a user
   useEffect(() => {
+    if (initialUser !== null) return;
+
     const checkSession = async () => {
       try {
         const res = await axios.get<{ user: AuthUser | null }>("/api/auth/me", {
@@ -55,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     checkSession();
-  }, []);
+  }, [initialUser]);
 
   const login = useCallback(async (email: string, password: string, _userType?: string) => {
     setIsLoading(true);
@@ -117,14 +126,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(async (data: Record<string, unknown>) => {
     try {
-      await axios.post("/api/proxy/auth/register", data, { withCredentials: true });
+      await axios.post("/api/auth/register", data, { withCredentials: true });
       return { success: true };
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError<{ message?: string }>;
+        const axiosError = error as AxiosError<{ error?: string; message?: string }>;
         return {
           success: false,
-          error: axiosError.response?.data?.message || "Registration failed",
+          error: axiosError.response?.data?.error || axiosError.response?.data?.message || "Registration failed",
         };
       }
       return { success: false, error: "Registration failed" };

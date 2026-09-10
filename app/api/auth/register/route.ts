@@ -10,9 +10,7 @@ type CsrfResponse = {
  * Fetches a CSRF token from the backend.
  * The backend returns { token, headerName } in the JSON body.
  */
-async function fetchCsrfToken(){
-  console.log('`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`',`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`);
-  
+async function fetchCsrfToken(): Promise<CsrfResponse | null> {
   try {
     const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`, {
       method: "GET",
@@ -20,9 +18,8 @@ async function fetchCsrfToken(){
     });
 
     if (!response.ok) return null;
-    
-   return await response.json() as CsrfResponse;
 
+    return await response.json() as CsrfResponse;
   } catch {
     return null;
   }
@@ -47,7 +44,7 @@ export async function POST(request: NextRequest) {
       headers["Cookie"] = `XSRF-TOKEN=${csrf.token}`;
     }
 
-    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/v1/auth/login/public`, {
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/v1/auth/register/public`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -56,46 +53,17 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({})) as Record<string, string>;
       return NextResponse.json(
-        { error: errorData.message || `Authentication failed (${response.status})` },
+        { error: errorData.message || `Registration failed (${response.status})` },
         { status: response.status }
       );
     }
 
-    const data = await response.json() as { jwtToken?: string; user?: Record<string, unknown> };
+    const data = await response.json().catch(() => ({}));
 
-    if (!data.jwtToken) {
-      return NextResponse.json(
-        { error: "Invalid response from server" },
-        { status: 500 }
-      );
-    }
-
-    const res = NextResponse.json({ user: data.user });
-
-    // Store the JWT in an httpOnly cookie (never exposed to JS)
-    res.cookies.set(SERVER_CONFIG.cookie.name, data.jwtToken, {
-      httpOnly: SERVER_CONFIG.cookie.httpOnly,
-      secure: SERVER_CONFIG.cookie.secure,
-      sameSite: SERVER_CONFIG.cookie.sameSite,
-      path: SERVER_CONFIG.cookie.path,
-      maxAge: SERVER_CONFIG.cookie.maxAge,
-    });
-
-    // Store non-sensitive user display data so the session survives refresh
-    if (data.user) {
-      res.cookies.set(SERVER_CONFIG.userCookie.name, JSON.stringify(data.user), {
-        httpOnly: SERVER_CONFIG.userCookie.httpOnly,
-        secure: SERVER_CONFIG.userCookie.secure,
-        sameSite: SERVER_CONFIG.userCookie.sameSite,
-        path: SERVER_CONFIG.userCookie.path,
-        maxAge: SERVER_CONFIG.userCookie.maxAge,
-      });
-    }
-
-    return res;
+    return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[API Login] Error:", message);
+    console.error("[API Register] Error:", message);
     return NextResponse.json(
       { error: "Cannot connect to server. Please check if backend is running." },
       { status: 503 }

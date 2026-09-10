@@ -11,7 +11,7 @@ function getCookieName(){
 /**
  * Routes that require authentication.
  */
-const PROTECTED_PATHS = ["/profile", "/applied-jobs", "/saved-jobs", "/employer"];
+const PROTECTED_PATHS = ["/profile", "/applied-jobs", "/saved-jobs", "/employer", "/admin"];
 
 /**
  * Routes that should redirect to home if already authenticated.
@@ -44,6 +44,7 @@ export const config = {
     "/applied-jobs/:path*",
     "/saved-jobs/:path*",
     "/employer/:path*",
+    "/admin/:path*",
     "/login",
     "/register",
   ],

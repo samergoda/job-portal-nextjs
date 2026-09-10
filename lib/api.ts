@@ -14,7 +14,7 @@ export const getAcceptHeader = (version = DEFAULT_API_VERSION) =>
   `application/vnd.eazyapp+json;v=${version}`;
 
 export const API_ENDPOINTS = {
-  COMPANIES: "v1/companies/public",
+  COMPANIES: "/v1/companies/public",
   COMPANY_BY_ID: (id: string | number) => `/companies/${id}`,
   JOBS: "/jobs",
   JOB_BY_ID: (id: string | number) => `/jobs/${id}`,
@@ -29,9 +29,9 @@ export const API_ENDPOINTS = {
   ADMIN_CONTACTS_PAGE: "/admin/contacts/page",
   UPDATE_CONTACT_STATUS: (id: string | number) => `/admin/contacts/${id}/status`,
   CSRF_TOKEN: "/csrf-token",
-  SEARCH_USER_BY_EMAIL: "/admin/users/search",
-  ELEVATE_TO_EMPLOYER: (userId: string | number) => `/admin/users/${userId}/elevate-to-employer`,
-  ASSIGN_COMPANY_TO_EMPLOYER: (userId: string | number) => `/admin/users/${userId}/assign-company`,
+  SEARCH_USER_BY_EMAIL: "/v1/users/search/admin",
+  ELEVATE_TO_EMPLOYER: (userId: string | number) => `/v1/users/${userId}/role/employer/admin`,
+  ASSIGN_COMPANY_TO_EMPLOYER: (userId: string | number, companyId: string | number) => `/v1/users/${userId}/company/${companyId}/admin`,
   EMPLOYER_JOBS: "/employer/jobs",
   POST_JOB: "/employer/jobs",
   UPDATE_JOB_STATUS: (jobId: string | number) => `/employer/jobs/${jobId}/status`,

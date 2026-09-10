@@ -3,35 +3,53 @@ import { SERVER_CONFIG, getAcceptHeader } from "@/lib/server/config";
 
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 
-type CsrfResponse = {
+type CsrfResult = {
   token: string;
   headerName: string;
+  /** The raw XSRF-TOKEN cookie string issued by the backend (name=value). */
+  cookie: string | null;
 };
 
 /**
- * Fetches a CSRF token from the backend.
- * The backend returns { token, headerName } in the JSON body.
+ * Fetches a CSRF token from the backend, forwarding the JWT + any incoming
+ * cookies so the token is issued in the SAME security context as the
+ * subsequent authenticated request (important for CookieCsrfTokenRepository).
+ *
+ * Returns the token, the header name to use, and the raw XSRF-TOKEN cookie
+ * the backend set — so we can echo the exact cookie back to the backend.
  */
-async function fetchCsrfToken(): Promise<CsrfResponse | null> {
+async function fetchCsrfToken(token: string | undefined, incomingCookie: string): Promise<CsrfResult | null> {
   try {
-    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/csrf-token/public`, {
+    const headers: Record<string, string> = {
+      Accept: getAcceptHeader(),
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (incomingCookie) headers["Cookie"] = incomingCookie;
+
+    const response = await fetch(`${SERVER_CONFIG.apiBaseUrl}/v1/csrf-token/public`, {
       method: "GET",
-      credentials: "include",
+      headers,
     });
 
     if (!response.ok) return null;
 
-    const data = await response.json() as CsrfResponse;
-    return data;
+    const data = (await response.json()) as { token: string; headerName: string };
+
+    // Capture the XSRF-TOKEN cookie the backend just issued (if any)
+    const setCookie = response.headers.get("set-cookie") || "";
+    const match = setCookie.match(/XSRF-TOKEN=[^;]+/);
+    const cookie = match ? match[0] : `XSRF-TOKEN=${data.token}`;
+
+    return { token: data.token, headerName: data.headerName || "X-XSRF-TOKEN", cookie };
   } catch {
     return null;
   }
 }
 
 /**
- * Proxy route handler that forwards authenticated requests to the backend.
- * - JWT is read from the httpOnly cookie — never exposed to client JS.
- * - CSRF token is fetched and forwarded for state-changing methods.
+ * Proxy route handler that forwards requests from the browser to the Spring backend.
+ * - JWT is read from the httpOnly cookie and sent as Authorization: Bearer (server-side).
+ * - CSRF token is fetched and forwarded (header + matching cookie) for state-changing methods.
  */
 async function proxyRequest(
   request: NextRequest,
@@ -43,7 +61,10 @@ async function proxyRequest(
   const queryString = url.search;
   const targetUrl = `${SERVER_CONFIG.apiBaseUrl}${targetPath}${queryString}`;
 
+  // JWT from the httpOnly cookie — Spring reads it from the Authorization header.
   const token = request.cookies.get(SERVER_CONFIG.cookie.name)?.value;
+  // Forward the browser's original cookies (JSESSIONID, etc.) to preserve session context.
+  const incomingCookie = request.headers.get("cookie") || "";
 
   const headers: Record<string, string> = {
     Accept: getAcceptHeader(),
@@ -53,18 +74,29 @@ async function proxyRequest(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  const cookieParts: string[] = [];
+  if (incomingCookie) {
+    cookieParts.push(incomingCookie);
+  }
+
   const hasBody = !SAFE_METHODS.includes(request.method);
   if (hasBody) {
     headers["Content-Type"] = request.headers.get("content-type") || "application/json";
 
-    // Fetch and attach CSRF token for state-changing requests
-    const csrf = await fetchCsrfToken();
+    // Fetch a CSRF token in the same auth/session context as this request
+    const csrf = await fetchCsrfToken(token, incomingCookie);
     if (csrf) {
-      // Set the CSRF token in the header (using the headerName from backend)
-      headers[csrf.headerName] = csrf.token;
-      // Also set the CSRF token as a cookie for Spring's CookieCsrfTokenRepository validation
-      headers["Cookie"] = `XSRF-TOKEN=${csrf.token}`;
+      // Header must match the cookie value (URL-decoded)
+      headers[csrf.headerName] = decodeURIComponent(csrf.token);
+      // Echo the exact XSRF-TOKEN cookie the backend issued
+      if (csrf.cookie) {
+        cookieParts.push(csrf.cookie);
+      }
     }
+  }
+
+  if (cookieParts.length > 0) {
+    headers["Cookie"] = cookieParts.join("; ");
   }
 
   try {
@@ -80,38 +112,42 @@ async function proxyRequest(
     const response = await fetch(targetUrl, fetchOptions);
 
     if (response.status === 401) {
-      const res = NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-      res.cookies.set(SERVER_CONFIG.cookie.name, "", {
-        httpOnly: SERVER_CONFIG.cookie.httpOnly,
-        secure: SERVER_CONFIG.cookie.secure,
-        sameSite: SERVER_CONFIG.cookie.sameSite,
-        path: SERVER_CONFIG.cookie.path,
-        maxAge: 0,
-      });
+      const res = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      res.cookies.set(SERVER_CONFIG.cookie.name, "", { ...SERVER_CONFIG.cookie, maxAge: 0 });
+      res.cookies.set(SERVER_CONFIG.userCookie.name, "", { ...SERVER_CONFIG.userCookie, maxAge: 0 });
       return res;
     }
 
     const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      const data: unknown = await response.json();
-      return NextResponse.json(data, { status: response.status });
+    const bodyText = await response.text();
+
+    const res =
+      contentType.includes("application/json") && bodyText
+        ? NextResponse.json(JSON.parse(bodyText), { status: response.status })
+        : new NextResponse(bodyText, {
+            status: response.status,
+            headers: contentType ? { "Content-Type": contentType } : undefined,
+          });
+
+    // Forward any XSRF-TOKEN cookie the backend set back to the browser
+    const setCookie = response.headers.get("set-cookie");
+    if (setCookie) {
+      const match = setCookie.match(/XSRF-TOKEN=([^;]+)/);
+      if (match) {
+        res.cookies.set("XSRF-TOKEN", decodeURIComponent(match[1]), {
+          httpOnly: false, // readable by JS/axios per Spring's default
+          secure: SERVER_CONFIG.cookie.secure,
+          sameSite: "lax",
+          path: "/",
+        });
+      }
     }
 
-    const text = await response.text();
-    return new NextResponse(text, {
-      status: response.status,
-      headers: { "Content-Type": contentType },
-    });
+    return res;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`[Proxy] Error forwarding ${request.method} ${targetPath}:`, message);
-    return NextResponse.json(
-      { error: "Service unavailable" },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }
 }
 
