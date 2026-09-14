@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/sections/section-heading";
 import { JobCard } from "@/components/sections/job-card";
 import { CompanyCard } from "@/components/sections/company-card";
-import { useJobs } from "@/lib/hooks/use-jobs";
-import { useCompanies } from "@/lib/hooks/use-companies";
+import { useCompaniesData } from "@/lib/companies-data-context";
 
 export default function HomePage() {
-  const { jobs, loading: jobsLoading } = useJobs();
-  const { companies, loading: companiesLoading } = useCompanies();
+  // Single source — jobs and companies both come from one fetch
+  const { jobs, companies, loading } = useCompaniesData();
+  const jobsLoading = loading;
+  const companiesLoading = loading;
 
   const featuredJobs = jobs.slice(0, 6);
   const featuredCompanies = companies.slice(0, 6);

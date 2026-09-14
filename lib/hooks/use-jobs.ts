@@ -1,59 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import type { DisplayJob } from "@/lib/types";
-import { fetchDisplayJobs, fetchDisplayJobById } from "@/lib/services/data-service";
+import { useCompaniesData } from "@/lib/companies-data-context";
 
+/**
+ * Reads jobs from the shared CompaniesDataProvider.
+ * No network call here — the data is fetched once by the provider.
+ */
 export function useJobs() {
-  const [jobs, setJobs] = useState<DisplayJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await fetchDisplayJobs();
-      setJobs(data);
-    } catch (err: unknown) {
-      console.error("[useJobs] Failed to fetch jobs:", err);
-      setError("Failed to load jobs. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  return { jobs, loading, error, refetch: load };
+  const { jobs, loading, error, refetch } = useCompaniesData();
+  return { jobs, loading, error, refetch };
 }
 
 export function useJobById(id: string) {
-  const [job, setJob] = useState<DisplayJob | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { jobs, loading, error } = useCompaniesData();
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchDisplayJobById(id);
-        if (!cancelled) setJob(data);
-      } catch (err: unknown) {
-        if (!cancelled) setError("Failed to load job details.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
-    return () => { cancelled = true; };
-  }, [id]);
+  const job = useMemo<DisplayJob | null>(
+    () => jobs.find((j) => j.id === id) || null,
+    [jobs, id]
+  );
 
   return { job, loading, error };
 }

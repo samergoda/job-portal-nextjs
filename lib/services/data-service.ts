@@ -122,10 +122,17 @@ function normalizeCompany(company: RawCompany): DisplayCompany {
   };
 }
 
-export async function fetchDisplayJobs(): Promise<DisplayJob[]> {
+/**
+ * Fetches the raw companies payload from /v1/companies/public.
+ * Jobs and companies are both derived from this single endpoint.
+ */
+export async function fetchRawCompanies(): Promise<RawCompany[]> {
   const response = await httpClient.get<RawCompany[]>(API_ENDPOINTS.COMPANIES);
-  const companies: RawCompany[] = response.data || [];
+  return response.data || [];
+}
 
+/** Maps a raw companies payload into display jobs. */
+export function mapDisplayJobs(companies: RawCompany[]): DisplayJob[] {
   const allJobs: DisplayJob[] = [];
   for (const company of companies) {
     const jobs = Array.isArray(company.jobs) ? company.jobs : [];
@@ -133,23 +140,20 @@ export async function fetchDisplayJobs(): Promise<DisplayJob[]> {
       allJobs.push(normalizeJob({ ...job, companyName: job.companyName || company.name }));
     }
   }
-
   return allJobs;
 }
 
-export async function fetchDisplayCompanies(): Promise<DisplayCompany[]> {
-  const response = await httpClient.get<RawCompany[]>(API_ENDPOINTS.COMPANIES);
-  const companies: RawCompany[] = response.data || [];
+/** Maps a raw companies payload into display companies. */
+export function mapDisplayCompanies(companies: RawCompany[]): DisplayCompany[] {
   return companies.map(normalizeCompany);
 }
 
-export async function fetchDisplayJobById(id: string): Promise<DisplayJob | null> {
-  try {
-    const jobs = await fetchDisplayJobs();
-    return jobs.find((job) => job.id === id) || null;
-  } catch {
-    return null;
-  }
+export async function fetchDisplayJobs(): Promise<DisplayJob[]> {
+  return mapDisplayJobs(await fetchRawCompanies());
+}
+
+export async function fetchDisplayCompanies(): Promise<DisplayCompany[]> {
+  return mapDisplayCompanies(await fetchRawCompanies());
 }
 
 export async function fetchDisplayCompanyById(id: string): Promise<(DisplayCompany & { jobs?: DisplayJob[] }) | null> {

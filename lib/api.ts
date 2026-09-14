@@ -13,15 +13,21 @@ export const DEFAULT_API_VERSION = "1.0";
 export const getAcceptHeader = (version = DEFAULT_API_VERSION) =>
   `application/vnd.eazyapp+json;v=${version}`;
 
+/**
+ * Endpoint paths WITHOUT the `/v1` prefix. The proxy prepends `/v1` to every
+ * forwarded request, so keep these version-agnostic.
+ */
 export const API_ENDPOINTS = {
-  COMPANIES: "/v1/companies/public",
+  COMPANIES: "/companies/public",
   COMPANY_BY_ID: (id: string | number) => `/companies/${id}`,
   JOBS: "/jobs",
   JOB_BY_ID: (id: string | number) => `/jobs/${id}`,
   LOGIN: "/auth/login",
   REGISTER: "/auth/register",
-  PROFILE: "/profile",
-  UPDATE_PROFILE: "/profile",
+  PROFILE: "/profile/jobseeker",
+  UPDATE_PROFILE: "/profile/jobseeker",
+  PROFILE_PICTURE: "/profile/picture/jobseeker",
+  PROFILE_RESUME: "/profile/resume/jobseeker",
   CONTACTS: "/contacts",
   CONTACT_BY_ID: (id: string | number) => `/contacts/${id}`,
   ADMIN_CONTACTS: "/admin/contacts",
@@ -29,27 +35,24 @@ export const API_ENDPOINTS = {
   ADMIN_CONTACTS_PAGE: "/admin/contacts/page",
   UPDATE_CONTACT_STATUS: (id: string | number) => `/admin/contacts/${id}/status`,
   CSRF_TOKEN: "/csrf-token",
-  SEARCH_USER_BY_EMAIL: "/v1/users/search/admin",
-  ELEVATE_TO_EMPLOYER: (userId: string | number) => `/v1/users/${userId}/role/employer/admin`,
-  ASSIGN_COMPANY_TO_EMPLOYER: (userId: string | number, companyId: string | number) => `/v1/users/${userId}/company/${companyId}/admin`,
+  SEARCH_USER_BY_EMAIL: "/users/search/admin",
+  ELEVATE_TO_EMPLOYER: (userId: string | number) => `/users/${userId}/role/employer/admin`,
+  ASSIGN_COMPANY_TO_EMPLOYER: (userId: string | number, companyId: string | number) => `/users/${userId}/company/${companyId}/admin`,
   EMPLOYER_JOBS: "/employer/jobs",
   POST_JOB: "/employer/jobs",
-  UPDATE_JOB_STATUS: (jobId: string | number) => `/employer/jobs/${jobId}/status`,
-  SAVED_JOBS: "/saved-jobs",
-  SAVED_JOB_IDS: "/saved-jobs/ids",
-  SAVE_JOB: (jobId: string | number) => `/saved-jobs/${jobId}`,
-  UNSAVE_JOB: (jobId: string | number) => `/saved-jobs/${jobId}`,
-  CHECK_JOB_SAVED: (jobId: string | number) => `/saved-jobs/check/${jobId}`,
-  JOB_APPLICATIONS: "/job-applications",
-  APPLY_JOB: "/job-applications",
-  WITHDRAW_APPLICATION: (jobId: string | number) => `/job-applications/${jobId}`,
-  MY_APPLICATIONS: "/job-applications/my-applications",
-  APPLIED_JOB_IDS: "/job-applications/applied-job-ids",
-  CHECK_APPLIED: (jobId: string | number) => `/job-applications/check/${jobId}`,
+  UPDATE_JOB_STATUS: (jobId: string | number) => `/employer/${jobId}/status/employer`,
+  SAVED_JOBS: "/profile/saved-jobs/jobseeker",
+  SAVE_JOB: (jobId: string | number) => `/profile/saved-jobs/${jobId}/jobseeker`,
+  UNSAVE_JOB: (jobId: string | number) => `/profile/saved-jobs/${jobId}/jobseeker`,
+  APPLY_JOB: "/profile/job-applications/jobseeker",
+  MY_APPLICATIONS: "/profile/job-applications/jobseeker",
+  WITHDRAW_APPLICATION: (jobId: string | number) => `/profile/job-applications/${jobId}/jobseeker`,
   APPLICATIONS_BY_JOB: (jobId: string | number) => `/job-applications/job/${jobId}`,
-  COMPANY_APPLICATIONS: "/job-applications/company-applications",
   UPDATE_APPLICATION_STATUS: (applicationId: string | number) => `/job-applications/${applicationId}/status`,
 };
+
+/** API version prefix applied to every backend request. */
+export const API_VERSION_PREFIX = "/v1";
 
 /**
  * The httpClient targets Next.js proxy routes (/api/proxy/...).
@@ -67,7 +70,11 @@ const httpClient = axios.create({
 
 httpClient.interceptors.request.use((config) => {
   const headers = new AxiosHeaders(config.headers || {});
-  headers.set("Accept", getAcceptHeader());
+  // Only apply the default vendor Accept when the caller hasn't set one
+  // (blob/binary requests set their own Accept, e.g. image/* or application/pdf).
+  if (!headers.get("Accept")) {
+    headers.set("Accept", getAcceptHeader());
+  }
   config.headers = headers;
   return config;
 });

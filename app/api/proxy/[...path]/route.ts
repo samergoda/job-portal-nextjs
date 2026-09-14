@@ -56,7 +56,9 @@ async function proxyRequest(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const targetPath = `/${path.join("/")}`;
+  const joined = path.join("/");
+  // Prepend the /v1 version prefix to every backend request (unless already present)
+  const targetPath = joined.startsWith("v1/") ? `/${joined}` : `/v1/${joined}`;
   const url = new URL(request.url);
   const queryString = url.search;
   const targetUrl = `${SERVER_CONFIG.apiBaseUrl}${targetPath}${queryString}`;
@@ -66,8 +68,16 @@ async function proxyRequest(
   // Forward the browser's original cookies (JSESSIONID, etc.) to preserve session context.
   const incomingCookie = request.headers.get("cookie") || "";
 
+  // Forward the browser's Accept header so binary endpoints (image/pdf) work.
+  // Fall back to the vendor JSON type for normal API calls.
+  const incomingAccept = request.headers.get("accept") || "";
+  const acceptHeader =
+    incomingAccept && !incomingAccept.includes("text/html")
+      ? incomingAccept
+      : getAcceptHeader();
+
   const headers: Record<string, string> = {
-    Accept: getAcceptHeader(),
+    Accept: acceptHeader,
   };
 
   if (token) {
@@ -119,15 +129,39 @@ async function proxyRequest(
     }
 
     const contentType = response.headers.get("content-type") || "";
-    const bodyText = await response.text();
+    if (targetPath.includes("/picture/") || targetPath.includes("/resume/")) {
+      console.log(`[Proxy binary] ${targetPath} → status ${response.status}, content-type: "${contentType}"`);
+    }
+    const isJson = contentType.includes("application/json");
+    const isText =
+      contentType.startsWith("text/") ||
+      contentType.includes("json") ||
+      contentType.includes("xml") ||
+      contentType === "";
 
-    const res =
-      contentType.includes("application/json") && bodyText
+    let res: NextResponse;
+
+    if (isJson) {
+      const bodyText = await response.text();
+      res = bodyText
         ? NextResponse.json(JSON.parse(bodyText), { status: response.status })
-        : new NextResponse(bodyText, {
-            status: response.status,
-            headers: contentType ? { "Content-Type": contentType } : undefined,
-          });
+        : new NextResponse(null, { status: response.status });
+    } else if (isText) {
+      const bodyText = await response.text();
+      res = new NextResponse(bodyText, {
+        status: response.status,
+        headers: contentType ? { "Content-Type": contentType } : undefined,
+      });
+    } else {
+      // Binary payload (images, PDFs, etc.) — pass raw bytes through untouched.
+      // Let Next compute Content-Length from the buffer to avoid mismatches.
+      const buffer = await response.arrayBuffer();
+      const headers = new Headers();
+      headers.set("Content-Type", contentType || "application/octet-stream");
+      const contentDisposition = response.headers.get("content-disposition");
+      if (contentDisposition) headers.set("Content-Disposition", contentDisposition);
+      res = new NextResponse(buffer, { status: response.status, headers });
+    }
 
     // Forward any XSRF-TOKEN cookie the backend set back to the browser
     const setCookie = response.headers.get("set-cookie");
